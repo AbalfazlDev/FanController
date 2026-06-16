@@ -10,9 +10,16 @@
 
 #define btn_right PD3
 #define btn_left PD2
-#define btn_currnt_mode PB0
+#define btn_currnt_mode PD1
 #define fan_frame 4
 #define step_fan_speed 10
+#define read_fan_pals PB0
+#define fan_pwm PB1
+
+// for calculate fan rpm
+uint8_t last_icr ;
+uint8_t priod = 0;
+bool is_ready_new_priod =false;
 
 typedef enum {
 	mode_manual,
@@ -124,8 +131,18 @@ int initialize_micro(void){
 	DDRD &=~( (1 << btn_left)  | (1 << btn_right) );
 	PORTD |= (1 << btn_left)  |(1 << btn_right);
 	
-	DDRB &=~(1<<btn_currnt_mode);
-	PORTB |=(1<<btn_currnt_mode);
+	DDRD &=~(1<<btn_currnt_mode);
+	PORTD |=(1<<btn_currnt_mode);
+	
+	DDRB &= ~(1<<read_fan_pals);
+	PORTB |= (1<<read_fan_pals); //pull up
+	//TCCR1B = (1 <<CS10); //Clock Select bit 0 & Timer/Counter Control Register
+	TIMSK1 = (1 <<ICIE1); // Input Capture Interrupt Enable
+	
+	DDRB |= (1<<fan_pwm);
+	TCCR1A = (1 << COM1A1) | (1 << WGM10);  // Clear on match, Fast PWM 8-bit 
+	TCCR1B = (1 << WGM12)  | (1 << CS11) | (1 << CS10); //Fast PWM 8-bit? prescaler=64
+	OCR1A = 128;
 	
 	EICRA |= (1<<ISC01) | (1<<ISC11);
 	EICRA &= ~((1<<ISC00) | (1 <<ISC10));
@@ -136,15 +153,22 @@ int initialize_micro(void){
 ISR(INT0_vect) {
 	_delay_ms(30);
 	if ((PIND & (1 << btn_left)) == 0)
-		if(fan_speed !=0)
-			fan_speed-=step_fan_speed;
+	if(fan_speed !=0)
+	fan_speed-=step_fan_speed;
 }
 
 ISR(INT1_vect) {
 	_delay_ms(30);
 	if ((PIND & (1 << btn_right)) == 0)
-		if(fan_speed!=100)
-			fan_speed+=step_fan_speed;
+	if(fan_speed!=100)
+	fan_speed+=step_fan_speed;
+}
+
+ISR(TIMER1_CAPT_vect){
+	uint8_t now = ICR1;
+	priod = now - last_icr;
+	last_icr = now;
+	is_ready_new_priod = true;
 }
 
 uint16_t ADC_Read(uint8_t channel){
@@ -181,16 +205,28 @@ void set_fan_adnimation_frame() {
 	//}
 }
 
+void set_fan_speed(uint8_t speed){
+	uint8_t pwm = speed * 255 / 100;
+	OCR1A = pwm;
+}
+
 void btn_check(){
-	switch(PINB &(1<<btn_currnt_mode)){
-		case 1:
-		current_mode = mode_auto;
+	switch(PIND &(1<<btn_currnt_mode)){
+		case 2:
+		current_mode = mode_manual;
 		break;
 		case 0:
-		current_mode = mode_manual;
+		current_mode = mode_auto;
 		break;
 	}
 }
+
+// uint8_t Cal_Fan_RPM(){
+// 	if(is_ready_new_priod){
+// 		is_ready_new_priod = false
+// 		
+// 	}
+// }
 
 void Update_Screen(){
 	fb.clear();
@@ -273,16 +309,17 @@ int main(void) {
 		
 		if (fan_speed <= 25) {
 			strcpy(fan_speed_str,"low");
-			} 
-			else if (fan_speed <= 50) {
+		}
+		else if (fan_speed <= 50) {
 			strcpy(fan_speed_str,"medium");
-			}
-			else if (fan_speed <= 75) {
+		}
+		else if (fan_speed <= 75) {
 			strcpy(fan_speed_str,"fast");;
-			} 
-			else {
+		}
+		else {
 			strcpy(fan_speed_str,"turbo");;
 		}
+		set_fan_speed(fan_speed);
 
 		temp_k =_adc_voltage * 100;
 		temp_c = temp_k - 273.15;
