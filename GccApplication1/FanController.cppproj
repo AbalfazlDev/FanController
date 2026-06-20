@@ -166,6 +166,12 @@
     <Compile Include="Tools\I2C.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="Tools\icon.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="Tools\icon.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="Tools\SSD1306.cpp">
       <SubType>compile</SubType>
     </Compile>
